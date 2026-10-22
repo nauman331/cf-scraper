@@ -1,0 +1,24 @@
+﻿{
+    "name":  "cf-scraper",
+    "version":  "1.0.0",
+    "description":  "",
+    "main":  "multi-scraper.mjs",
+    "scripts":  {
+                    "start":  "node multi-scraper.mjs",
+                    "test":  "echo \"Error: no test specified\" \u0026\u0026 exit 1",
+                    "scrape:similarweb":  "node similarweb-scraper.mjs"
+                },
+    "keywords":  [
+
+                 ],
+    "type":  "commonjs",
+    "dependencies":  {
+                         "axios":  "^1.20.0",
+                         "ghostfetch":  "^0.1.2",
+                         "https-proxy-agent":  "^9.1.0",
+                         "isolated-vm":  "^7.0.1",
+                         "playwright-core":  "^1.64.1",
+                         "rss-parser":  "^3.13.0",
+                         "socks-proxy-agent":  "^10.1.0"
+                     }
+}
