@@ -1,0 +1,22 @@
+{
+  "source": "Similarweb public website report",
+  "reportUrl": "https://www.similarweb.com/website/hamariweb.com/",
+  "domain": "hamariweb.com",
+  "period": "September 2026",
+  "scrapedAt": "2026-10-22T11:33:30.288Z",
+  "rankings": {
+    "global": 9447,
+    "country": 60,
+    "countryName": "Pakistan",
+    "category": 3,
+    "categoryName": "News & Media Publishers"
+  },
+  "engagement": {
+    "bounceRate": "57.76%",
+    "bounceRatePercent": 57.76,
+    "pagesPerVisit": 2.35,
+    "averageVisitDuration": "00:01:34",
+    "averageVisitDurationSeconds": 94,
+    "lastMonthTrafficChange": "5.8%"
+  }
+}

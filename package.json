@@ -6,7 +6,8 @@
     "scripts":  {
                     "start":  "node multi-scraper.mjs",
                     "test":  "echo \"Error: no test specified\" \u0026\u0026 exit 1",
-                    "scrape:similarweb":  "node similarweb-scraper.mjs"
+                    "scrape:similarweb":  "node similarweb-scraper.mjs",
+                    "gui":  "node similarweb-gui.mjs"
                 },
     "keywords":  [
 

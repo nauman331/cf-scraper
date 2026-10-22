@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Similarweb Scraper</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231F4FFF'/%3E%3Crect x='7' y='17' width='4' height='8' rx='1.5' fill='white'/%3E%3Crect x='14' y='11' width='4' height='14' rx='1.5' fill='white'/%3E%3Crect x='21' y='6' width='4' height='19' rx='1.5' fill='white'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #ecf0f5;
+  --panel: #ffffff;
+  --panel-2: #f5f7fa;
+  --ink: #0f1a2a;
+  --muted: #566679;
+  --line: #d9e1ea;
+  --accent: #1f4fff;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4eaff;
+  --hero: #1b3fd1;
+  --hero-ink: #ffffff;
+  --hero-muted: rgba(255, 255, 255, 0.72);
+  --good: #0b8a5e;
+  --good-soft: #dcf3e9;
+  --bad: #c42f45;
+  --bad-soft: #fbe3e7;
+  --warn: #a96a00;
+  --warn-soft: #fcefd2;
+  --console-bg: #0d1622;
+  --console-ink: #c9d6e6;
+  --shadow: 0 1px 2px rgba(15, 26, 42, 0.05), 0 10px 28px -14px rgba(15, 26, 42, 0.18);
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+}
+[data-theme="dark"] {
+  --bg: #0a111a;
+  --panel: #111b28;
+  --panel-2: #0d1621;
+  --ink: #e7edf5;
+  --muted: #8b9bb0;
+  --line: #213144;
+  --accent: #6c8cff;
+  --accent-ink: #0a111a;
+  --accent-soft: #1a2750;
+  --hero: #17307f;
+  --hero-ink: #ffffff;
+  --hero-muted: rgba(255, 255, 255, 0.7);
+  --good: #3ecf9a;
+  --good-soft: #10332a;
+  --bad: #ff7a8c;
+  --bad-soft: #3a1620;
+  --warn: #f0b64a;
+  --warn-soft: #382a0c;
+  --console-bg: #070d15;
+  --console-ink: #b9c7da;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 30px -14px rgba(0, 0, 0, 0.6);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app { max-width: 1480px; margin: 0 auto; padding: 20px 24px 48px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 0 20px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 38px; height: 38px; border-radius: 11px; background: var(--accent); display: grid; place-items: center; flex: none; }
+.brand-mark svg { display: block; }
+.brand h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.2; }
+.brand p { margin: 0; color: var(--muted); font-size: 13px; }
+.top-actions { display: flex; align-items: center; gap: 10px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; font-weight: 550; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill[data-state="running"] .dot { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+.pill[data-state="done"] .dot { background: var(--good); }
+.pill[data-state="failed"] .dot { background: var(--bad); }
+@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.7); } }
+.icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); display: grid; place-items: center; }
+.icon-btn:hover { background: var(--panel-2); }
+.layout { display: grid; grid-template-columns: 372px minmax(0, 1fr); gap: 20px; align-items: start; }
+.side, .main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px 0; }
+.card-head h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.005em; }
+.card-body { padding: 14px 20px 20px; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.field label, .field .label { font-size: 13px; font-weight: 600; }
+.hint { color: var(--muted); font-size: 12.5px; }
+textarea, input[type="text"], input[type="number"], input[type="search"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+textarea { min-height: 112px; resize: vertical; font-family: var(--mono); font-size: 13px; line-height: 1.55; }
+textarea::placeholder, input::placeholder { color: var(--muted); opacity: 0.7; }
+textarea:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.switch { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); margin-bottom: 14px; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; pointer-events: none; }
+.switch .track { width: 38px; height: 22px; border-radius: 999px; background: var(--line); position: relative; flex: none; margin-top: 1px; transition: background 0.15s; }
+.switch .track::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(16px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch strong { display: block; font-size: 13.5px; font-weight: 600; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+details.adv { margin-bottom: 16px; }
+details.adv summary { cursor: pointer; font-weight: 600; font-size: 13px; padding: 4px 0 10px; color: var(--muted); }
+details.adv[open] summary { color: var(--ink); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 11px; border: 1px solid transparent; font-weight: 600; transition: background 0.12s, transform 0.05s; }
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--accent); color: var(--accent-ink); width: 100%; }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-danger { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); width: 100%; }
+.btn-ghost { background: var(--panel-2); border-color: var(--line); height: 34px; padding: 0 12px; font-size: 13px; font-weight: 550; border-radius: 9px; }
+.btn-ghost:hover { background: var(--accent-soft); border-color: var(--accent); }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.queue li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px; border: 1px solid transparent; background: var(--panel-2); cursor: pointer; }
+.queue li:hover { border-color: var(--line); }
+.queue li[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.queue .name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue .state { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--line); color: var(--muted); }
+.mark svg { display: block; }
+.mark.done { background: var(--good-soft); color: var(--good); }
+.mark.failed, .mark.stopped { background: var(--bad-soft); color: var(--bad); }
+.mark.running { background: var(--accent-soft); color: var(--accent); }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { padding: 22px 8px; text-align: center; color: var(--muted); }
+.empty strong { display: block; color: var(--ink); font-size: 14px; margin-bottom: 4px; }
+.result-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 20px 20px 0; }
+.result-head h2 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 13px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); font-size: 12.5px; color: var(--ink); }
+.chip.accent { background: var(--accent-soft); border-color: transparent; color: var(--accent); font-weight: 600; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions a { text-decoration: none; color: inherit; display: inline-flex; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; padding: 18px 20px 20px; }
+.hero { grid-column: span 6; background: var(--hero); color: var(--hero-ink); border-radius: 16px; padding: 22px 24px 20px; display: flex; flex-direction: column; justify-content: space-between; min-height: 224px; }
+.hero .label { color: var(--hero-muted); font-size: 13.5px; font-weight: 550; }
+.hero .big { font-size: clamp(44px, 6vw, 72px); font-weight: 650; letter-spacing: -0.035em; line-height: 1.02; font-variant-numeric: tabular-nums; margin: 6px 0 18px; word-break: break-all; }
+.hero .big small { font-size: 0.5em; font-weight: 600; margin-right: 4px; opacity: 0.7; letter-spacing: 0; }
+.scale { position: relative; height: 34px; }
+.scale .rail { position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.28); }
+.scale .fill { position: absolute; left: 0; top: 6px; height: 4px; border-radius: 2px; background: #fff; }
+.scale .pin { position: absolute; top: 0; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 4px solid var(--hero); box-shadow: 0 0 0 2px #fff; transform: translateX(-50%); }
+.scale .tick { position: absolute; top: 18px; font-size: 11.5px; color: var(--hero-muted); transform: translateX(-50%); white-space: nowrap; }
+.scale .tick:first-of-type { transform: none; }
+.scale .tick.end { transform: translateX(-100%); }
+.hero .caption { margin-top: 6px; font-size: 12.5px; color: var(--hero-muted); }
+.tile { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tile .label { color: var(--muted); font-size: 13px; font-weight: 550; }
+.tile .value { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+.tile .sub { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.span-3 { grid-column: span 3; }
+.span-6 { grid-column: span 6; }
+.bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 8px; }
+.bar > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.state-box { padding: 44px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.state-box h3 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
+.state-box p { margin: 0; color: var(--muted); max-width: 52ch; }
+.state-box .big-spin { width: 40px; height: 40px; color: var(--accent); }
+.error-note { background: var(--bad-soft); color: var(--bad); border-radius: 12px; padding: 12px 16px; max-width: 64ch; text-align: left; overflow-wrap: anywhere; }
+.console-wrap { background: var(--console-bg); border-radius: 0 0 16px 16px; margin-top: 14px; }
+.console { height: 230px; overflow: auto; padding: 14px 18px; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; color: var(--console-ink); }
+.console .ln { white-space: pre-wrap; word-break: break-word; }
+.console .t { color: #5d7088; margin-right: 10px; }
+.console .ln.err { color: #ff8b9b; }
+.console .ln.ok { color: #62e0b0; }
+.console .ln.info { color: #8fb0ff; }
+.console .none { color: #5d7088; }
+.tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tools input[type="search"] { width: 200px; padding: 7px 12px; height: 34px; }
+.table-wrap { overflow-x: auto; margin-top: 12px; }
+table { width: 100%; border-collapse: collapse; min-width: 640px; }
+th { text-align: left; font-size: 12.5px; color: var(--muted); font-weight: 600; padding: 8px 20px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 12px 20px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.site { font-weight: 600; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--panel-2); }
+tbody tr[aria-selected="true"] { background: var(--accent-soft); }
+tbody tr:last-child td { border-bottom: 0; }
+.num { text-align: right; }
+th.num { text-align: right; }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); background: var(--ink); color: var(--bg); padding: 11px 18px; border-radius: 12px; font-weight: 550; max-width: min(90vw, 560px); opacity: 0; pointer-events: none; transition: opacity 0.18s, transform 0.18s; z-index: 50; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.bad { background: var(--bad); color: #fff; }
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; }
+  .hero { grid-column: span 12; }
+  .span-3 { grid-column: span 6; }
+}
+@media (max-width: 640px) {
+  .app { padding: 14px 14px 40px; }
+  .row { grid-template-columns: 1fr; }
+  .span-3, .span-6 { grid-column: span 12; }
+  .tools input[type="search"] { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 32 32"><rect x="5" y="17" width="5" height="10" rx="1.8" fill="#fff"/><rect x="13.5" y="10" width="5" height="17" rx="1.8" fill="#fff"/><rect x="22" y="4" width="5" height="23" rx="1.8" fill="#fff"/></svg>
+      </div>
+      <div>
+        <h1>Similarweb Scraper</h1>
+        <p>Pull public traffic reports and keep every run.</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="pill" id="statusPill" data-state="idle"><span class="dot"></span><span id="statusText">Ready</span></span>
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch theme" title="Switch theme"></button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="side">
+      <section class="card" aria-labelledby="runTitle">
+        <div class="card-head"><h2 id="runTitle">New scrape</h2></div>
+        <div class="card-body">
+          <div class="field">
+            <label for="targets">Websites</label>
+            <textarea id="targets" spellcheck="false" placeholder="hamariweb.com&#10;example.com"></textarea>
+            <span class="hint">One per line. Use a domain or a Similarweb report link.</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="showBrowser">
+            <span class="track"></span>
+            <span><strong>Show browser window</strong><span class="hint">Turn this on if Similarweb asks you to verify you are human.</span></span>
+          </label>
+          <details class="adv">
+            <summary>Browser settings</summary>
+            <div class="field">
+              <label for="timeout">Timeout (seconds)</label>
+              <input type="number" id="timeout" min="10" max="600" step="5">
+            </div>
+            <div class="field">
+              <label for="chrome">Chrome location</label>
+              <input type="text" id="chrome" spellcheck="false">
+            </div>
+          </details>
+          <button class="btn btn-primary" id="runBtn" type="button">Start scrape</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="queueTitle">
+        <div class="card-head"><h2 id="queueTitle">Current run</h2><span class="hint" id="queueCount"></span></div>
+        <div class="card-body">
+          <ul class="queue" id="queue"></ul>
+        </div>
+      </section>
+    </aside>
+
+    <main class="main">
+      <section class="card" id="resultCard" aria-live="polite"></section>
+
+      <section class="card" aria-labelledby="consoleTitle">
+        <div class="card-head">
+          <h2 id="consoleTitle">Console</h2>
+          <div class="tools"><button class="btn btn-ghost" id="clearLog" type="button">Clear</button></div>
+        </div>
+        <div class="console-wrap"><div class="console" id="console" role="log"></div></div>
+      </section>
+
+      <section class="card" aria-labelledby="historyTitle">
+        <div class="card-head">
+          <h2 id="historyTitle">Saved reports</h2>
+          <div class="tools">
+            <input type="search" id="filter" placeholder="Filter by website" aria-label="Filter saved reports">
+            <button class="btn btn-ghost" id="exportAll" type="button">Export all as CSV</button>
+            <button class="btn btn-ghost" id="refresh" type="button">Refresh</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Website</th>
+                <th>Period</th>
+                <th class="num">Global rank</th>
+                <th class="num">Country rank</th>
+                <th class="num">Bounce rate</th>
+                <th>Saved</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+        <div id="historyEmpty" class="empty" hidden><strong>No saved reports yet</strong>Finished scrapes are listed here and stay in the data folder.</div>
+      </section>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $ = (selector, root = document) => root.querySelector(selector);
+
+function h(tag, props, ...kids) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (key === 'class') node.className = value;
+    else if (key === 'text') node.textContent = value;
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else if (value !== false && value != null) node.setAttribute(key, value === true ? '' : value);
+  }
+  for (const kid of kids.flat()) {
+    if (kid !== null && kid !== undefined && kid !== false) node.append(kid);
+  }
+  return node;
+}
+
+function svg(markup, size = 14) {
+  const wrap = document.createElement('span');
+  wrap.style.display = 'inline-grid';
+  wrap.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${markup}</svg>`;
+  return wrap;
+}
+
+const icons = {
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  cross: '<path d="M6 6l12 12M18 6L6 18"/>',
+  dot: '<circle cx="12" cy="12" r="2.5"/>',
+  spinner: '<path d="M12 3a9 9 0 1 0 9 9" />',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/>',
+};
+
+const store = {
+  get(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw === null ? fallback : JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {}
+  },
+};
+
+const state = { job: null, history: [], selected: null, filter: '' };
+const els = {
+  targets: $('#targets'),
+  showBrowser: $('#showBrowser'),
+  timeout: $('#timeout'),
+  chrome: $('#chrome'),
+  runBtn: $('#runBtn'),
+  queue: $('#queue'),
+  queueCount: $('#queueCount'),
+  result: $('#resultCard'),
+  console: $('#console'),
+  historyBody: $('#historyBody'),
+  historyEmpty: $('#historyEmpty'),
+  pill: $('#statusPill'),
+  pillText: $('#statusText'),
+  toast: $('#toast'),
+};
+
+let toastTimer = null;
+function toast(message, bad = false) {
+  els.toast.textContent = message;
+  els.toast.className = `toast show${bad ? ' bad' : ''}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => els.toast.classList.remove('show'), 4200);
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const button = $('#themeBtn');
+  button.replaceChildren(svg(theme === 'dark' ? icons.sun : icons.moon, 18));
+  button.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+  store.set('theme', theme);
+}
+
+function initTheme() {
+  const saved = store.get('theme', null);
+  const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  applyTheme(saved || preferred);
+  $('#themeBtn').addEventListener('click', () => {
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+}
+
+const fmt = {
+  int: (value) => (value === null || value === undefined ? '—' : Number(value).toLocaleString('en-US')),
+  rank: (value) => (value === null || value === undefined ? '—' : `#${Number(value).toLocaleString('en-US')}`),
+  text: (value) => (value === null || value === undefined || value === '' ? '—' : String(value)),
+  date: (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  },
+  time: (value) => new Date(value).toLocaleTimeString([], { hour12: false }),
+  duration: (seconds) => {
+    if (seconds === null || seconds === undefined) return null;
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return minutes ? `${minutes}m ${rest}s` : `${rest}s`;
+  },
+};
+
+function csvCell(value) {
+  if (value === null || value === undefined) return '';
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+const csvColumns = [
+  ['source', (d) => d.source],
+  ['report_url', (d) => d.reportUrl],
+  ['domain', (d) => d.domain],
+  ['period', (d) => d.period],
+  ['scraped_at', (d) => d.scrapedAt],
+  ['global_rank', (d) => d.rankings?.global],
+  ['country_rank', (d) => d.rankings?.country],
+  ['country_name', (d) => d.rankings?.countryName],
+  ['category_rank', (d) => d.rankings?.category],
+  ['category_name', (d) => d.rankings?.categoryName],
+  ['bounce_rate', (d) => d.engagement?.bounceRate],
+  ['bounce_rate_percent', (d) => d.engagement?.bounceRatePercent],
+  ['pages_per_visit', (d) => d.engagement?.pagesPerVisit],
+  ['average_visit_duration', (d) => d.engagement?.averageVisitDuration],
+  ['average_visit_duration_seconds', (d) => d.engagement?.averageVisitDurationSeconds],
+  ['last_month_traffic_change', (d) => d.engagement?.lastMonthTrafficChange],
+];
+
+function download(name, content, type) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = h('a', { href: url, download: name });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportAll() {
+  if (!state.history.length) return toast('There are no saved reports to export yet.', true);
+  const header = csvColumns.map(([name]) => name).join(',');
+  const lines = state.history.map((entry) => csvColumns.map(([, pick]) => csvCell(pick(entry.data))).join(','));
+  const stamp = new Date().toISOString().slice(0, 10);
+  download(`similarweb_all_${stamp}.csv`, `\uFEFF${header}\r\n${lines.join('\r\n')}\r\n`, 'text/csv;charset=utf-8');
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = h('textarea', { style: 'position:fixed;opacity:0' });
+    area.value = text;
+    document.body.append(area);
+    area.select();
+    document.execCommand('copy');
+    area.remove();
+  }
+  toast('Report JSON copied');
+}
+
+function statusMark(status) {
+  const map = {
+    queued: ['', icons.dot],
+    running: ['running', icons.spinner],
+    done: ['done', icons.check],
+    failed: ['failed', icons.cross],
+    stopped: ['stopped', icons.cross],
+    skipped: ['', icons.dot],
+  };
+  const [cls, icon] = map[status] || map.queued;
+  const mark = h('span', { class: `mark ${cls}` }, svg(icon, 12));
+  if (status === 'running') mark.firstChild.classList.add('spin');
+  return mark;
+}
+
+const statusLabel = { queued: 'Waiting', running: 'Running', done: 'Done', failed: 'Failed', stopped: 'Stopped', skipped: 'Skipped' };
+
+function renderStatus() {
+  const job = state.job;
+  let mode = 'idle';
+  let text = 'Ready';
+  if (job?.running) {
+    mode = 'running';
+    text = `Scraping ${job.index + 1} of ${job.items.length}`;
+  } else if (job) {
+    const failed = job.items.filter((item) => item.status === 'failed').length;
+    const done = job.items.filter((item) => item.status === 'done').length;
+    if (failed && !done) {
+      mode = 'failed';
+      text = 'Run failed';
+    } else if (job.stopped) {
+      mode = 'failed';
+      text = 'Run stopped';
+    } else {
+      mode = 'done';
+      text = failed ? `Finished with ${failed} failed` : 'Run complete';
+    }
+  }
+  els.pill.dataset.state = mode;
+  els.pillText.textContent = text;
+}
+
+function renderControls() {
+  const running = Boolean(state.job?.running);
+  els.runBtn.replaceChildren(running ? 'Stop run' : 'Start scrape');
+  els.runBtn.className = `btn ${running ? 'btn-danger' : 'btn-primary'}`;
+  for (const control of [els.targets, els.showBrowser, els.timeout, els.chrome]) control.disabled = running;
+}
+
+function renderQueue() {
+  const job = state.job;
+  els.queue.replaceChildren();
+  if (!job) {
+    els.queueCount.textContent = '';
+    els.queue.append(h('li', { class: 'empty', style: 'cursor:default;display:block;background:none' }, h('strong', { text: 'Nothing running' }), 'Add a website above and start a scrape.'));
+    return;
+  }
+  const done = job.items.filter((item) => item.status === 'done').length;
+  els.queueCount.textContent = `${done} of ${job.items.length} done`;
+  job.items.forEach((item, index) => {
+    const selected = state.selected?.kind === 'job' && state.selected.index === index;
+    const stateText = h('span', { class: 'state', text: statusLabel[item.status] });
+    if (item.status === 'running') stateText.dataset.since = item.startedAt;
+    els.queue.append(
+      h('li', {
+        tabindex: '0',
+        'aria-current': selected ? 'true' : 'false',
+        onclick: () => select({ kind: 'job', index }),
+        onkeydown: (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            select({ kind: 'job', index });
+          }
+        },
+      }, statusMark(item.status), h('span', { class: 'name', text: item.domain }), stateText)
+    );
+  });
+}
+
+function currentView() {
+  const sel = state.selected;
+  if (!sel) return null;
+  if (sel.kind === 'job') {
+    const item = state.job?.items[sel.index];
+    return item ? { item, data: item.data, files: item.files } : null;
+  }
+  const entry = state.history.find((row) => row.id === sel.id);
+  return entry ? { item: null, data: entry.data, files: entry.files } : null;
+}
+
+function rankScale(rank) {
+  const max = 8;
+  const position = rank ? Math.min(1, Math.max(0.01, Math.log10(rank) / max)) : 0;
+  const ticks = [['1', 0], ['1K', 3 / max], ['1M', 6 / max], ['100M', 1]];
+  const root = h('div', { class: 'scale', role: 'img', 'aria-label': 'Global rank on a logarithmic scale from 1 to 100 million' },
+    h('div', { class: 'rail' }),
+    h('div', { class: 'fill', style: `width:${position * 100}%` }),
+    h('div', { class: 'pin', style: `left:${position * 100}%` })
+  );
+  for (const [label, at] of ticks) {
+    const tick = h('span', { class: `tick${at === 1 ? ' end' : ''}`, style: `left:${at * 100}%`, text: label });
+    root.append(tick);
+  }
+  return root;
+}
+
+function tile(span, label, value, sub, extra) {
+  return h('div', { class: `tile ${span}` }, h('span', { class: 'label', text: label }), h('span', { class: 'value', text: value }), sub ? h('span', { class: 'sub', text: sub }) : null, extra);
+}
+
+function renderResult() {
+  const view = currentView();
+  els.result.replaceChildren();
+
+  if (!view) {
+    els.result.append(
+      h('div', { class: 'state-box' },
+        h('h3', { text: 'No report selected' }),
+        h('p', { text: 'Start a scrape or pick a saved report below to see its rankings and engagement numbers here.' })
+      )
+    );
+    return;
+  }
+
+  const { item, data, files } = view;
+
+  if (item && !data) {
+    const box = h('div', { class: 'state-box' });
+    if (item.status === 'running') {
+      const spinner = svg(icons.spinner, 40);
+      spinner.classList.add('big-spin');
+      spinner.firstChild.classList.add('spin');
+      box.append(spinner, h('h3', { text: `Scraping ${item.domain}` }), h('p', { id: 'elapsed', text: 'Opening the report and reading the numbers.' }));
+    } else if (item.status === 'failed' || item.status === 'stopped') {
+      box.append(
+        h('h3', { text: item.status === 'stopped' ? `${item.domain} was stopped` : `${item.domain} did not finish` }),
+        h('div', { class: 'error-note', text: item.error || 'Unknown error' }),
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => retry(item.domain, true), disabled: Boolean(state.job?.running) }, 'Retry with browser window'),
+          h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => retry(item.domain, false), disabled: Boolean(state.job?.running) }, 'Retry as before')
+        )
+      );
+    } else {
+      box.append(h('h3', { text: `${item.domain} is waiting` }), h('p', { text: 'It will start as soon as the websites before it are finished.' }));
+    }
+    els.result.append(box);
+    return;
+  }
+
+  const links = [];
+  const labels = { csv: 'CSV', json: 'JSON', html: 'HTML', txt: 'Text' };
+  for (const key of ['csv', 'json', 'html', 'txt']) {
+    if (files?.[key]) {
+      links.push(h('a', { class: 'btn btn-ghost', href: `/api/file?name=${encodeURIComponent(files[key])}&download=1`, download: files[key] }, labels[key]));
+    }
+  }
+
+  const rank = data.rankings || {};
+  const eng = data.engagement || {};
+  const seconds = fmt.duration(eng.averageVisitDurationSeconds);
+  const bounce = eng.bounceRatePercent;
+
+  const head = h('div', { class: 'result-head' },
+    h('div', {},
+      h('h2', { text: data.domain || 'Report' }),
+      h('div', { class: 'meta' },
+        data.period ? h('span', { class: 'chip accent', text: data.period }) : null,
+        h('span', { text: `Scraped ${fmt.date(data.scrapedAt)}` }),
+        data.reportUrl ? h('a', { href: data.reportUrl, target: '_blank', rel: 'noopener noreferrer', style: 'color:var(--accent);font-weight:600;text-decoration:none', text: 'Open on Similarweb' }) : null
+      )
+    ),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => copyText(JSON.stringify(data, null, 2)) }, 'Copy JSON'),
+      links
+    )
+  );
+
+  const hero = h('div', { class: 'hero' },
+    h('div', {}, h('span', { class: 'label', text: 'Global rank' }), h('div', { class: 'big' }, h('small', { text: '#' }), rank.global === null || rank.global === undefined ? '—' : Number(rank.global).toLocaleString('en-US'))),
+    h('div', {}, rankScale(rank.global), h('div', { class: 'caption', text: 'Position among all websites, on a log scale' }))
+  );
+
+  const grid = h('div', { class: 'grid' },
+    hero,
+    tile('span-3', 'Country rank', fmt.rank(rank.country), rank.countryName),
+    tile('span-3', 'Category rank', fmt.rank(rank.category), rank.categoryName),
+    tile('span-3', 'Bounce rate', fmt.text(eng.bounceRate), null, bounce === null || bounce === undefined ? null : h('div', { class: 'bar', role: 'img', 'aria-label': `Bounce rate ${bounce} percent` }, h('span', { style: `width:${Math.min(100, Math.max(0, bounce))}%` }))),
+    tile('span-3', 'Pages per visit', fmt.text(eng.pagesPerVisit)),
+    tile('span-3', 'Average visit duration', fmt.text(eng.averageVisitDuration), seconds),
+    tile('span-3', 'Last month traffic change', fmt.text(eng.lastMonthTrafficChange), 'Compared with the month before')
+  );
+
+  els.result.append(head, grid);
+}
+
+function renderHistory() {
+  const term = state.filter.trim().toLowerCase();
+  const rows = state.history.filter((entry) => !term || (entry.data.domain || '').toLowerCase().includes(term));
+  els.historyBody.replaceChildren();
+  els.historyEmpty.hidden = rows.length > 0;
+  if (!rows.length && state.history.length) els.historyEmpty.replaceChildren(h('strong', { text: 'No matches' }), 'Try a different website name.');
+  if (!state.history.length) els.historyEmpty.replaceChildren(h('strong', { text: 'No saved reports yet' }), 'Finished scrapes are listed here and stay in the data folder.');
+  for (const entry of rows) {
+    const d = entry.data;
+    const selected = state.selected?.kind === 'history' && state.selected.id === entry.id;
+    els.historyBody.append(
+      h('tr', {
+        tabindex: '0',
+        'aria-selected': selected ? 'true' : 'false',
+        onclick: () => select({ kind: 'history', id: entry.id }),
+        onkeydown: (event) => {
+          if (event.key === 'Enter') select({ kind: 'history', id: entry.id });
+        },
+      },
+        h('td', { class: 'site', text: d.domain || '—' }),
+        h('td', { text: fmt.text(d.period) }),
+        h('td', { class: 'num', text: fmt.rank(d.rankings?.global) }),
+        h('td', { class: 'num', text: fmt.rank(d.rankings?.country) }),
+        h('td', { class: 'num', text: fmt.text(d.engagement?.bounceRate) }),
+        h('td', { text: fmt.date(d.scrapedAt || entry.mtime) })
+      )
+    );
+  }
+}
+
+function select(selection) {
+  state.selected = selection;
+  renderQueue();
+  renderResult();
+  renderHistory();
+}
+
+function renderAll() {
+  renderStatus();
+  renderControls();
+  renderQueue();
+  renderResult();
+  renderHistory();
+}
+
+function addLog(entry) {
+  const stick = els.console.scrollTop + els.console.clientHeight >= els.console.scrollHeight - 24;
+  const none = $('.none', els.console);
+  if (none) none.remove();
+  els.console.append(h('div', { class: `ln ${entry.level}` }, h('span', { class: 't', text: fmt.time(entry.time) }), entry.text));
+  while (els.console.childElementCount > 800) els.console.firstElementChild.remove();
+  if (stick) els.console.scrollTop = els.console.scrollHeight;
+}
+
+function clearLog() {
+  els.console.replaceChildren(h('div', { class: 'none', text: 'Output from the scraper appears here while it runs.' }));
+}
+
+async function loadHistory() {
+  try {
+    const response = await fetch('/api/history');
+    state.history = await response.json();
+  } catch {
+    state.history = [];
+  }
+  renderHistory();
+  if (!state.selected && state.history.length) select({ kind: 'history', id: state.history[0].id });
+  else renderResult();
+}
+
+let previousRunning = false;
+function onState(job) {
+  const wasRunning = previousRunning;
+  state.job = job;
+  previousRunning = Boolean(job?.running);
+
+  if (job) {
+    if (job.running && (!state.selected || state.selected.kind === 'job' || !wasRunning)) {
+      state.selected = { kind: 'job', index: job.index };
+    }
+    if (state.selected?.kind === 'job' && !job.items[state.selected.index]) state.selected = null;
+  }
+
+  renderAll();
+
+  if (wasRunning && !job?.running) {
+    const doneItems = job.items.map((item, index) => ({ item, index })).filter(({ item }) => item.status === 'done');
+    loadHistory().then(() => {
+      if (doneItems.length) {
+        const last = doneItems[doneItems.length - 1];
+        const entry = last.item.files?.json ? state.history.find((row) => row.files.json === last.item.files.json) : null;
+        select(entry ? { kind: 'history', id: entry.id } : { kind: 'job', index: last.index });
+      }
+    });
+    const failed = job.items.filter((item) => item.status === 'failed').length;
+    if (job.stopped) toast('Run stopped');
+    else if (failed) toast(`${failed} website${failed === 1 ? '' : 's'} failed. Check the console for details.`, true);
+    else toast('Run complete');
+  }
+}
+
+function connect() {
+  const source = new EventSource('/api/events');
+  source.onmessage = (message) => {
+    const event = JSON.parse(message.data);
+    if (event.type === 'state') onState(event.job);
+    else if (event.type === 'log') addLog(event);
+    else if (event.type === 'reset') clearLog();
+  };
+}
+
+function saveSettings() {
+  store.set('targets', els.targets.value);
+  store.set('showBrowser', els.showBrowser.checked);
+  store.set('timeout', els.timeout.value);
+  store.set('chrome', els.chrome.value);
+}
+
+async function start(targets, options = {}) {
+  const body = {
+    targets,
+    headless: options.headless ?? !els.showBrowser.checked,
+    timeoutSeconds: Number(els.timeout.value) || undefined,
+    chromePath: els.chrome.value.trim(),
+  };
+  try {
+    const response = await fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const payload = await response.json();
+    if (!response.ok) toast(payload.error || 'Could not start the run.', true);
+  } catch {
+    toast('Could not reach the local server. Is it still running?', true);
+  }
+}
+
+function retry(domain, visible) {
+  if (visible) els.showBrowser.checked = true;
+  saveSettings();
+  start([domain], { headless: !visible && !els.showBrowser.checked });
+}
+
+async function onRunClick() {
+  if (state.job?.running) {
+    try {
+      const response = await fetch('/api/stop', { method: 'POST' });
+      if (!response.ok) toast((await response.json()).error, true);
+    } catch {
+      toast('Could not reach the local server.', true);
+    }
+    return;
+  }
+  const lines = els.targets.value.split(/[\r\n,]+/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) {
+    toast('Add at least one website to scrape.', true);
+    els.targets.focus();
+    return;
+  }
+  saveSettings();
+  start(lines);
+}
+
+function tickElapsed() {
+  const label = $('.queue .state[data-since]');
+  if (label) {
+    const seconds = Math.max(0, Math.round((Date.now() - Number(label.dataset.since)) / 1000));
+    label.textContent = `Running · ${seconds}s`;
+  }
+  const note = $('#elapsed');
+  const running = state.job?.items.find((item) => item.status === 'running');
+  if (note && running) {
+    const seconds = Math.max(0, Math.round((Date.now() - running.startedAt) / 1000));
+    note.textContent = `Opening the report and reading the numbers. ${seconds}s elapsed.`;
+  }
+}
+
+async function init() {
+  initTheme();
+  clearLog();
+
+  let config = { chromePath: '', timeoutSeconds: 90, headless: true };
+  try {
+    config = await (await fetch('/api/config')).json();
+  } catch {}
+
+  els.targets.value = store.get('targets', '');
+  els.showBrowser.checked = store.get('showBrowser', !config.headless);
+  els.timeout.value = store.get('timeout', config.timeoutSeconds);
+  els.chrome.value = store.get('chrome', config.chromePath);
+
+  for (const control of [els.targets, els.showBrowser, els.timeout, els.chrome]) {
+    control.addEventListener('change', saveSettings);
+  }
+  els.targets.addEventListener('input', saveSettings);
+  els.runBtn.addEventListener('click', onRunClick);
+  $('#clearLog').addEventListener('click', clearLog);
+  $('#refresh').addEventListener('click', () => loadHistory().then(() => toast('Saved reports refreshed')));
+  $('#exportAll').addEventListener('click', exportAll);
+  $('#filter').addEventListener('input', (event) => {
+    state.filter = event.target.value;
+    renderHistory();
+  });
+
+  renderAll();
+  await loadHistory();
+  connect();
+  setInterval(tickElapsed, 500);
+}
+
+init();
+</script>
+</body>
+</html>
