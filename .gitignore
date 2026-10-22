@@ -19,3 +19,7 @@ proxies.txt
 
 # Runtime proxy rotation state
 data/.proxy-cursor
+
+# Crawlee runtime storage
+storage/
+data/crawlee-storage/

@@ -175,6 +175,18 @@ details.adv[open] summary { border-bottom: 1px solid var(--line); margin-bottom:
 .btn-ghost { background: var(--panel-2); border: 1px solid var(--line); height: 36px; padding: 0 14px; font-size: 13px; border-radius: 8px; color: var(--ink); }
 .btn-ghost:hover:not([disabled]) { background: var(--panel-hover); border-color: var(--muted); }
 
+/* Operational dashboard */
+.stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.stat-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.stat-card .value { display: block; font-size: 22px; line-height: 1.1; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-card .label { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.proxy-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; max-height: 190px; overflow: auto; }
+.proxy-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
+.proxy-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11px; }
+.proxy-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.proxy-actions .btn { height: 40px; }
+@media (max-width: 520px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 /* Queue */
 .queue { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .queue li { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 10px; border: 1px solid transparent; background: var(--panel-2); cursor: pointer; transition: all 0.2s; }
@@ -318,15 +330,7 @@ th.num { text-align: right; }
             <span class="hint">One per line. Use a domain or a Similarweb report link.</span>
           </div>
           
-          <label class="switch">
-            <input type="checkbox" id="showBrowser">
-            <span class="track"></span>
-            <span>
-              <strong>Show browser window</strong>
-              <span class="hint">Turn this on if Similarweb asks you to verify you are human.</span>
-            </span>
-          </label>
-          
+
           <details class="adv">
             <summary>Advanced browser settings</summary>
             <div class="field">
@@ -353,6 +357,27 @@ th.num { text-align: right; }
         </div>
         <div class="card-body" style="padding-top: 16px;">
           <ul class="queue" id="queue"></ul>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="statsTitle">
+        <div class="card-head"><h2 id="statsTitle">Run Statistics</h2></div>
+        <div class="card-body"><div class="stats-grid" id="statsGrid"></div></div>
+      </section>
+
+      <section class="card" aria-labelledby="proxyTitle">
+        <div class="card-head"><h2 id="proxyTitle">Proxy Manager</h2><span class="hint" id="proxyCount">0 configured</span></div>
+        <div class="card-body">
+          <div class="proxy-list" id="proxyList"></div>
+          <div class="field">
+            <label for="proxyInput">Add proxies</label>
+            <textarea id="proxyInput" spellcheck="false" placeholder="host:port:username:password&#10;http://user:pass@host:port"></textarea>
+            <span class="hint">Credentials stay server-side and are masked after saving. One proxy per line.</span>
+          </div>
+          <div class="proxy-actions">
+            <button class="btn btn-ghost" id="saveProxies" type="button">Add proxies</button>
+            <button class="btn btn-ghost" id="clearProxies" type="button">Clear all</button>
+          </div>
         </div>
       </section>
     </aside>
@@ -472,10 +497,9 @@ const store = {
   },
 };
 
-const state = { job: null, history: [], selected: null, filter: '' };
+const state = { job: null, history: [], selected: null, filter: '', proxies: [] };
 const els = {
   targets: $('#targets'),
-  showBrowser: $('#showBrowser'),
   timeout: $('#timeout'),
   chrome: $('#chrome'),
   runBtn: $('#runBtn'),
@@ -488,6 +512,12 @@ const els = {
   pill: $('#statusPill'),
   pillText: $('#statusText'),
   toast: $('#toast'),
+  statsGrid: $('#statsGrid'),
+  proxyList: $('#proxyList'),
+  proxyCount: $('#proxyCount'),
+  proxyInput: $('#proxyInput'),
+  saveProxies: $('#saveProxies'),
+  clearProxies: $('#clearProxies'),
 };
 
 let toastTimer = null;
@@ -645,7 +675,61 @@ function renderControls() {
 
   els.runBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;">${iconMarkup}</svg>${running ? 'Stop run' : 'Start scrape'}`;
   els.runBtn.className = `btn ${running ? 'btn-danger' : 'btn-primary'}`;
-  for (const control of [els.targets, els.showBrowser, els.timeout, els.chrome]) control.disabled = running;
+  for (const control of [els.targets, els.timeout, els.chrome, els.proxyInput, els.saveProxies, els.clearProxies]) control.disabled = running;
+}
+
+function renderStats() {
+  const stats = state.job?.stats || { attempts: 0, directFailures: 0, proxyAttempts: 0, blocked: 0, verification: 0, network: 0, other: 0, successes: 0 };
+  const values = [
+    ['Attempts', stats.attempts],
+    ['Proxy tries', stats.proxyAttempts],
+    ['Blocked', stats.blocked],
+    ['Verification', stats.verification],
+    ['Network', stats.network],
+    ['Other', stats.other],
+    ['Successes', stats.successes],
+    ['Direct fails', stats.directFailures],
+  ];
+  els.statsGrid.replaceChildren(...values.map(([label, value]) =>
+    h('div', { class: 'stat-card' }, h('span', { class: 'value', text: String(value || 0) }), h('span', { class: 'label', text: label }))
+  ));
+}
+
+function renderProxies() {
+  els.proxyCount.textContent = `${state.proxies.length} configured`;
+  els.proxyList.replaceChildren();
+  if (!state.proxies.length) {
+    els.proxyList.append(h('div', { class: 'empty', style: 'padding:20px 12px;' }, h('strong', { text: 'No proxies configured' }), h('span', { text: 'Direct connection will be used.', style: 'font-size:12px;' })));
+    return;
+  }
+  state.proxies.forEach((proxy) => els.proxyList.append(
+    h('div', { class: 'proxy-row' }, h('code', { text: proxy.display }))
+  ));
+}
+
+async function loadProxies() {
+  try {
+    const payload = await (await fetch('/api/proxies')).json();
+    state.proxies = payload.proxies || [];
+  } catch {
+    state.proxies = [];
+  }
+  renderProxies();
+}
+
+async function saveProxyList(clear = false) {
+  const additions = clear ? [] : els.proxyInput.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const proxies = additions;
+  try {
+    const response = await fetch('/api/proxies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proxies, append: !clear }) });
+    const payload = await response.json();
+    if (!response.ok) return toast(payload.error || 'Could not save proxies.', true);
+    els.proxyInput.value = '';
+    await loadProxies();
+    toast(clear ? 'Proxy list cleared' : 'Proxies saved');
+  } catch {
+    toast('Could not reach the proxy manager.', true);
+  }
 }
 
 function renderQueue() {
@@ -743,8 +827,7 @@ function renderResult() {
         h('h3', { text: item.status === 'stopped' ? `${item.domain} was stopped` : `${item.domain} did not finish` }),
         h('div', { class: 'error-note', text: item.error || 'Unknown error occurred during fetch.' }),
         h('div', { class: 'actions', style: 'margin-top: 16px;' },
-          h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => retry(item.domain, true), disabled: Boolean(state.job?.running) }, 'Retry with browser window'),
-          h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => retry(item.domain, false), disabled: Boolean(state.job?.running) }, 'Retry as before')
+          h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => retry(item.domain), disabled: Boolean(state.job?.running) }, 'Retry automatically')
         )
       );
     } else {
@@ -845,6 +928,7 @@ function renderHistory() {
 function select(selection) {
   state.selected = selection;
   renderQueue();
+  renderStats();
   renderResult();
   renderHistory();
 }
@@ -853,6 +937,7 @@ function renderAll() {
   renderStatus();
   renderControls();
   renderQueue();
+  renderStats();
   renderResult();
   renderHistory();
 }
@@ -925,7 +1010,6 @@ function connect() {
 
 function saveSettings() {
   store.set('targets', els.targets.value);
-  store.set('showBrowser', els.showBrowser.checked);
   store.set('timeout', els.timeout.value);
   store.set('chrome', els.chrome.value);
 }
@@ -933,7 +1017,7 @@ function saveSettings() {
 async function start(targets, options = {}) {
   const body = {
     targets,
-    headless: options.headless ?? !els.showBrowser.checked,
+    headless: true,
     timeoutSeconds: Number(els.timeout.value) || undefined,
     chromePath: els.chrome.value.trim(),
   };
@@ -946,10 +1030,9 @@ async function start(targets, options = {}) {
   }
 }
 
-function retry(domain, visible) {
-  if (visible) els.showBrowser.checked = true;
+function retry(domain) {
   saveSettings();
-  start([domain], { headless: !visible && !els.showBrowser.checked });
+  start([domain], { headless: true });
 }
 
 async function onRunClick() {
@@ -996,11 +1079,10 @@ async function init() {
   } catch {}
 
   els.targets.value = store.get('targets', '');
-  els.showBrowser.checked = store.get('showBrowser', !config.headless);
   els.timeout.value = store.get('timeout', config.timeoutSeconds);
   els.chrome.value = store.get('chrome', config.chromePath);
 
-  for (const control of [els.targets, els.showBrowser, els.timeout, els.chrome]) {
+  for (const control of [els.targets, els.timeout, els.chrome]) {
     control.addEventListener('change', saveSettings);
   }
   els.targets.addEventListener('input', saveSettings);
@@ -1013,8 +1095,11 @@ async function init() {
     renderHistory();
   });
 
+  els.saveProxies.addEventListener('click', () => saveProxyList(false));
+  els.clearProxies.addEventListener('click', () => saveProxyList(true));
+
   renderAll();
-  await loadHistory();
+  await Promise.all([loadHistory(), loadProxies()]);
   connect();
   setInterval(tickElapsed, 500);
 }

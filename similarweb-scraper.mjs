@@ -1,4 +1,5 @@
 ﻿import 'dotenv/config';
+import { PlaywrightCrawler, ProxyConfiguration, Configuration } from 'crawlee';
 import { chromium } from 'playwright-core';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,12 +10,27 @@ const chromePath = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome
 const headless = process.env.HEADLESS !== 'false';
 const timeout = Number(process.env.SCRAPER_TIMEOUT_MS || 90000);
 const proxyFile = process.env.PROXY_FILE || 'proxies.txt';
-const maxProxyAttempts = Math.max(0, Number(process.env.MAX_PROXY_ATTEMPTS || 3));
+const maxProxyAttempts = Math.max(0, Number(process.env.MAX_PROXY_ATTEMPTS || 10));
+const minRequestDelayMs = Math.max(0, Number(process.env.MIN_REQUEST_DELAY_MS || 2000));
+const maxRequestDelayMs = Math.max(minRequestDelayMs, Number(process.env.MAX_REQUEST_DELAY_MS || 6000));
 const proxyCursorFile = join(outputDir, '.proxy-cursor');
 const similarwebApiKey = process.env.SIMILARWEB_API_KEY?.trim();
 
 class RetryableAccessError extends Error {}
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function emitStat(type, detail = {}) {
+  console.log(`@@STAT ${JSON.stringify({ type, ...detail })}`);
+}
+
+async function waitRequestJitter(label) {
+  const delay = Math.round(minRequestDelayMs + Math.random() * (maxRequestDelayMs - minRequestDelayMs));
+  if (delay > 0) {
+    console.log(`Waiting ${(delay / 1000).toFixed(1)}s before ${label}`);
+    await sleep(delay);
+  }
+}
 function maskProxy(value) {
   try {
     const url = new URL(value.includes('://') ? value : `http://${value}`);
@@ -465,6 +481,134 @@ async function scrapeWith(proxy) {
   }
 }
 
+async function scrapeWithCrawlee(proxies) {
+  if (!proxies.length) return null;
+
+  let lastError = null;
+  const outcomes = { blocked: 0, verification: 0, network: 0, other: 0 };
+  for (let index = 0; index < proxies.length; index += 1) {
+    const proxy = proxies[index];
+    const url = new URL(proxy.server);
+    if (proxy.username) url.username = proxy.username;
+    if (proxy.password) url.password = proxy.password;
+
+    const proxyConfiguration = new ProxyConfiguration({ proxyUrls: [url.toString()] });
+    const runStorageId = `run-${process.pid}-${Date.now()}-${index}`;
+    const configuration = new Configuration({
+      persistStorage: false,
+      purgeOnStart: true,
+      defaultRequestQueueId: runStorageId,
+      defaultKeyValueStoreId: runStorageId,
+      defaultDatasetId: runStorageId,
+      logLevel: 'OFF',
+    });
+    let report = null;
+    let attemptError = null;
+
+    const crawler = new PlaywrightCrawler({
+      proxyConfiguration,
+      useSessionPool: true,
+      persistCookiesPerSession: true,
+      sessionPoolOptions: {
+        maxPoolSize: 1,
+        sessionOptions: { maxUsageCount: 20 },
+      },
+      maxConcurrency: 1,
+      maxRequestRetries: 0,
+      maxSessionRotations: 0,
+      navigationTimeoutSecs: Math.max(10, Math.ceil(timeout / 1000)),
+      requestHandlerTimeoutSecs: Math.max(20, Math.ceil(timeout / 1000) + 10),
+      launchContext: {
+        launcher: chromium,
+        launchOptions: {
+          executablePath: chromePath,
+          headless,
+        },
+      },
+      preNavigationHooks: [async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 1000 });
+      }],
+      async requestHandler({ page, response, session }) {
+        const status = response?.status();
+        let [bodyText, html, title] = await Promise.all([
+          page.locator('body').innerText(),
+          page.content(),
+          page.title(),
+        ]);
+        let embeddedData = extractEmbeddedReport(html, page.url(), title);
+        let challenged = status === 202 || /verify that you.re not a robot|challenge-container|AwsWafIntegration|request could not be satisfied/i.test(`${bodyText}\n${html}`);
+
+        if (challenged && !headless) {
+          console.log(`Verification page opened through ${proxy.label}. Complete it in the visible browser; waiting up to ${Math.round(timeout / 1000)} seconds.`);
+          const deadline = Date.now() + timeout;
+          while (Date.now() < deadline) {
+            if (page.isClosed()) throw new Error('The browser was closed while waiting for verification.');
+            await page.waitForTimeout(1000);
+            [bodyText, html, title] = await Promise.all([
+              page.locator('body').innerText(),
+              page.content(),
+              page.title(),
+            ]);
+            embeddedData = extractEmbeddedReport(html, page.url(), title);
+            if (embeddedData || bodyText.includes('Global Rank')) {
+              challenged = false;
+              console.log('Verification completed; report data loaded.');
+              break;
+            }
+          }
+        }
+
+        if ([403, 429, 503].includes(status)) {
+          session?.retire();
+          throw new RetryableAccessError(`Similarweb returned HTTP ${status}`);
+        }
+        if (challenged) {
+          session?.retire();
+          throw new RetryableAccessError(
+            headless
+              ? 'Similarweb returned a verification challenge (HTTP 202); enable "Show browser window" to complete it'
+              : `Similarweb verification was not completed within ${Math.round(timeout / 1000)} seconds`
+          );
+        }
+        if (!embeddedData && !bodyText.includes('Global Rank')) {
+          session?.retire();
+          throw new RetryableAccessError(`Similarweb returned HTTP ${status || 'unknown'} without report data`);
+        }
+
+        report = { bodyText, html, title, url: page.url(), embeddedData };
+        session?.markGood();
+      },
+      failedRequestHandler(_context, error) {
+        attemptError = error;
+      },
+    }, configuration);
+
+    console.log(`Crawlee proxy ${index + 1}/${proxies.length}: ${proxy.label} (isolated request queue)`);
+    emitStat('proxyAttempt', { index: index + 1, total: proxies.length, proxy: proxy.label });
+    try {
+      await waitRequestJitter(`Crawlee proxy ${index + 1}/${proxies.length}`);
+      await crawler.run([{ url: reportUrl, uniqueKey: `${reportUrl}#${Date.now()}-${index}` }]);
+    } catch (error) {
+      attemptError = error;
+    }
+
+    if (report) return report;
+    lastError = attemptError || new RetryableAccessError(`No report data returned through ${proxy.label}`);
+    if (/verification challenge|HTTP 202/i.test(lastError.message)) outcomes.verification += 1;
+    else if (/403|blocked/i.test(lastError.message)) outcomes.blocked += 1;
+    else if (/ERR_|ECONN|ETIMEDOUT|Timeout/i.test(lastError.message)) outcomes.network += 1;
+    else outcomes.other += 1;
+    emitStat('proxyOutcome', { category: /verification challenge|HTTP 202/i.test(lastError.message) ? 'verification' : /403|blocked/i.test(lastError.message) ? 'blocked' : /ERR_|ECONN|ETIMEDOUT|Timeout/i.test(lastError.message) ? 'network' : 'other' });
+    console.log(`Proxy result: ${lastError.message}`);
+    if (index + 1 < proxies.length) console.log('Rotating to the next Crawlee proxy');
+  }
+
+  const summary = `${outcomes.verification} verification, ${outcomes.blocked} blocked, ${outcomes.network} network, ${outcomes.other} other`;
+  if (outcomes.verification > 0 && headless) {
+    throw new RetryableAccessError(`${outcomes.verification} prox${outcomes.verification === 1 ? 'y reached' : 'ies reached'} Similarweb verification. Enable "Show browser window" and retry to complete it (${summary})`);
+  }
+  throw new RetryableAccessError(`No proxy returned report data (${summary})`);
+}
 async function main() {
   const domain = domainFromReportUrl(reportUrl);
   await mkdir(outputDir, { recursive: true });
@@ -476,39 +620,38 @@ async function main() {
   }
 
   const proxies = await selectProxyWindow(await loadProxies());
-  const attempts = [null, ...proxies];
   let report = null;
   let lastError = null;
 
-  for (let index = 0; index < attempts.length; index += 1) {
-    const proxy = attempts[index];
-    console.log(proxy ? `Trying proxy ${index}/${proxies.length}: ${proxy.label}` : 'Trying direct connection');
-    try {
-      report = await scrapeWith(proxy);
-      if (proxy) console.log(`Proxy succeeded: ${proxy.label}`);
-      break;
-    } catch (error) {
-      lastError = error;
-      const hasNext = index + 1 < attempts.length;
-      const proxyNetworkError = proxy && /ERR_(?:PROXY|TUNNEL|TIMED_OUT|CONNECTION|NAME_NOT_RESOLVED|SOCKS)|ECONN|ETIMEDOUT|ESOCKET|EAI_AGAIN|ENOTFOUND|Timeout/i.test(error.message);
-      if (error instanceof RetryableAccessError || proxyNetworkError) {
-        if (hasNext) {
-          console.log(`${error.message}; ${proxy ? 'rotating to the next proxy' : 'trying proxy fallback'}`);
-          continue;
-        }
-        break;
-      }
+  console.log('Trying direct connection');
+  emitStat('directAttempt');
+  try {
+    await waitRequestJitter('direct connection');
+    report = await scrapeWith(null);
+  } catch (error) {
+    lastError = error;
+    emitStat('directFailure', { category: /403|blocked/i.test(error.message) ? 'blocked' : /verification|202/i.test(error.message) ? 'verification' : /ERR_|ECONN|ETIMEDOUT|Timeout/i.test(error.message) ? 'network' : 'other' });
+    if (!(error instanceof RetryableAccessError) && !/ERR_(?:TIMED_OUT|CONNECTION|NAME_NOT_RESOLVED)|ECONN|ETIMEDOUT|Timeout/i.test(error.message)) {
       throw error;
     }
+    if (proxies.length) console.log(`${error.message}; handing proxy fallback to Crawlee`);
   }
 
+  if (!report && proxies.length) {
+    try {
+      report = await scrapeWithCrawlee(proxies);
+    } catch (error) {
+      lastError = error;
+    }
+  }
   if (!report) {
     const suffix = proxies.length
-      ? ` after direct access and ${proxies.length} proxy attempt${proxies.length === 1 ? '' : 's'}`
+      ? ` after direct access and ${proxies.length} Crawlee proxy attempt${proxies.length === 1 ? '' : 's'}`
       : '; add proxies to proxies.txt to enable limited fallback';
     throw new Error(`${lastError?.message || 'Similarweb report could not be loaded'}${suffix}`);
   }
 
+  emitStat('success');
   const data = report.embeddedData || extractReport(report.bodyText, report.url, report.title);
   await saveReport(data, { html: report.html, text: report.bodyText });
 }

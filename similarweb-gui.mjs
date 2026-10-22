@@ -1,13 +1,14 @@
 ﻿import 'dotenv/config';
 import http from 'node:http';
 import { spawn, exec } from 'node:child_process';
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const scraperPath = join(root, 'similarweb-scraper.mjs');
 const dataDir = join(root, 'data');
+const proxyPath = join(root, process.env.PROXY_FILE || 'proxies.txt');
 const indexPath = join(root, 'gui', 'index.html');
 const port = Number(process.env.GUI_PORT || 4173);
 const defaultChrome = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
@@ -38,6 +39,7 @@ function publicJob() {
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
     options: job.options,
+    stats: job.stats,
     items: job.items.map(({ input, domain, url, status, error, startedAt, finishedAt, data, files }) => ({
       input,
       domain,
@@ -61,6 +63,70 @@ function pushLog(level, text) {
   logBuffer.push(entry);
   if (logBuffer.length > 1500) logBuffer.shift();
   broadcast(entry);
+}
+
+function maskProxyLine(value) {
+  const trimmed = String(value).trim();
+  if (!trimmed) return '';
+  const provider = trimmed.match(/^([^:\s]+):(\d+):([^:]+):(.+)$/);
+  if (provider) return `${provider[1]}:${provider[2]}:${provider[3]}:***`;
+  try {
+    const url = new URL(trimmed.includes('://') ? trimmed : `http://${trimmed}`);
+    if (url.password) url.password = '***';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return 'Invalid proxy';
+  }
+}
+
+function validateProxyLine(value) {
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  if (/^[^:\s]+:\d+:[^:]+:.+$/.test(trimmed)) return trimmed;
+  const url = new URL(trimmed.includes('://') ? trimmed : `http://${trimmed}`);
+  if (!['http:', 'https:', 'socks5:'].includes(url.protocol) || !url.hostname || !url.port) {
+    throw new Error('Use host:port:user:pass or http://user:pass@host:port');
+  }
+  return trimmed;
+}
+
+async function readProxies() {
+  try {
+    return (await readFile(proxyPath, 'utf8')).split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+async function proxySummary() {
+  const proxies = await readProxies();
+  return { count: proxies.length, proxies: proxies.map((value, index) => ({ id: index, display: maskProxyLine(value) })) };
+}
+
+function emptyStats() {
+  return { attempts: 0, directFailures: 0, proxyAttempts: 0, blocked: 0, verification: 0, network: 0, other: 0, successes: 0 };
+}
+
+function applyStat(line) {
+  if (!line.startsWith('@@STAT ') || !job) return false;
+  try {
+    const stat = JSON.parse(line.slice(7));
+    const metrics = job.stats;
+    if (stat.type === 'directAttempt') metrics.attempts += 1;
+    if (stat.type === 'directFailure') {
+      metrics.directFailures += 1;
+      metrics[stat.category] = (metrics[stat.category] || 0) + 1;
+    }
+    if (stat.type === 'proxyAttempt') {
+      metrics.attempts += 1;
+      metrics.proxyAttempts += 1;
+    }
+    if (stat.type === 'proxyOutcome') metrics[stat.category] = (metrics[stat.category] || 0) + 1;
+    if (stat.type === 'success') metrics.successes += 1;
+    pushState();
+  } catch {}
+  return true;
 }
 
 function normalizeTarget(raw) {
@@ -145,7 +211,7 @@ function runItem(item) {
         }
         return;
       }
-      if (line.trim()) pushLog('out', line);
+      if (line.trim() && !applyStat(line)) pushLog('out', line);
     });
 
     const err = lineReader((line) => {
@@ -320,6 +386,7 @@ async function handleStart(req, res) {
     finishedAt: null,
     child: null,
     options: { headless: body.headless !== false, chromePath, timeoutSeconds },
+    stats: emptyStats(),
     items: targets.map((target) => ({ ...target, status: 'queued', error: null, startedAt: null, finishedAt: null, data: null, files: null })),
   };
   logBuffer.length = 0;
@@ -328,6 +395,33 @@ async function handleStart(req, res) {
   pushState();
   runQueue();
   json(res, 202, { ok: true });
+}
+
+async function handleSaveProxies(req, res) {
+  if (job?.running) return json(res, 409, { error: 'Stop the current run before changing proxies.' });
+  let body;
+  try {
+    body = await readBody(req);
+  } catch (error) {
+    return json(res, 400, { error: error.message });
+  }
+
+  const input = Array.isArray(body.proxies) ? body.proxies : String(body.proxies || '').split(/\r?\n/);
+  const values = body.append === true ? await readProxies() : [];
+  const invalid = [];
+  for (const line of input) {
+    try {
+      const value = validateProxyLine(line);
+      if (value && !values.includes(value)) values.push(value);
+    } catch (error) {
+      invalid.push(`${maskProxyLine(line)}: ${error.message}`);
+    }
+  }
+  if (invalid.length) return json(res, 400, { error: `Invalid proxies: ${invalid.join(', ')}` });
+  if (values.length > 200) return json(res, 400, { error: 'Proxy list is limited to 200 entries.' });
+
+  await writeFile(proxyPath, values.length ? `${values.join('\n')}\n` : '', { encoding: 'utf8', mode: 0o600 });
+  json(res, 200, await proxySummary());
 }
 
 function handleStop(res) {
@@ -372,8 +466,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/config') {
-      return json(res, 200, { chromePath: defaultChrome, headless: process.env.HEADLESS !== 'false', timeoutSeconds: defaultTimeoutSeconds });
+      return json(res, 200, { chromePath: defaultChrome, headless: true, timeoutSeconds: defaultTimeoutSeconds, proxyCount: (await readProxies()).length });
     }
+
+    if (req.method === 'GET' && url.pathname === '/api/proxies') {
+      return json(res, 200, await proxySummary());
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/proxies') return handleSaveProxies(req, res);
 
     if (req.method === 'GET' && url.pathname === '/api/history') {
       return json(res, 200, await listHistory());

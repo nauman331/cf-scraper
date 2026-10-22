@@ -141,6 +141,9 @@ Environment=GUI_NO_OPEN=true
 Environment=CHROME_PATH=$CHROME_PATH
 Environment=HEADLESS=true
 Environment=SCRAPER_TIMEOUT_MS=90000
+Environment=MAX_PROXY_ATTEMPTS=10
+Environment=MIN_REQUEST_DELAY_MS=2000
+Environment=MAX_REQUEST_DELAY_MS=6000
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
