@@ -1,3 +1,4 @@
+﻿import 'dotenv/config';
 import http from 'node:http';
 import { spawn, exec } from 'node:child_process';
 import { readFile, readdir, stat } from 'node:fs/promises';

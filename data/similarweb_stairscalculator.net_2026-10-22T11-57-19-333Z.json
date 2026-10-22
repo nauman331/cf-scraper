@@ -1,0 +1,22 @@
+{
+  "source": "Similarweb public website report",
+  "reportUrl": "https://www.similarweb.com/website/stairscalculator.net/",
+  "domain": "stairscalculator.net",
+  "period": "September 2026",
+  "scrapedAt": "2026-10-22T11:57:19.332Z",
+  "rankings": {
+    "global": 2193585,
+    "country": 1615831,
+    "countryName": "United States",
+    "category": null,
+    "categoryName": null
+  },
+  "engagement": {
+    "bounceRate": "33.55%",
+    "bounceRatePercent": 33.55,
+    "pagesPerVisit": 1.85,
+    "averageVisitDuration": "00:00:15",
+    "averageVisitDurationSeconds": 15,
+    "lastMonthTrafficChange": "58.52%"
+  }
+}

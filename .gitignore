@@ -10,3 +10,12 @@
 *temp*
 *backup*
 *old*
+
+# Private proxy credentials
+proxies.txt
+
+# Private API credentials
+.env
+
+# Runtime proxy rotation state
+data/.proxy-cursor

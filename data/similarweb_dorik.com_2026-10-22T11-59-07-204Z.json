@@ -1,0 +1,22 @@
+{
+  "source": "Similarweb public website report",
+  "reportUrl": "https://www.similarweb.com/website/dorik.com/",
+  "domain": "dorik.com",
+  "period": "September 2026",
+  "scrapedAt": "2026-10-22T11:59:07.203Z",
+  "rankings": {
+    "global": 347839,
+    "country": 108356,
+    "countryName": "India",
+    "category": 2169,
+    "categoryName": "485 Computers Electronics and Technology > Graphics Multimedia and Web Design"
+  },
+  "engagement": {
+    "bounceRate": "38.08%",
+    "bounceRatePercent": 38.08,
+    "pagesPerVisit": 1.99,
+    "averageVisitDuration": "00:00:19",
+    "averageVisitDurationSeconds": 19,
+    "lastMonthTrafficChange": "27.66%"
+  }
+}
